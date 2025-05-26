@@ -15,18 +15,17 @@ const InputActFecha = document.getElementById('act_fecha_esperada');
 const InputActHora = document.getElementById('act_hora_esperada');
 
 const ValidarFecha = () => {
-    console.log("🎯 ValidarFecha ejecutándose - SIN RESTRICCIONES");
+    console.log(" ValidarFecha ejecutándose - SIN RESTRICCIONES");
     
     if (InputActFecha.value === '') {
         InputActFecha.classList.remove('is-valid', 'is-invalid');
         return;
     }
 
-    // Carlos puede programar actividades en cualquier fecha
     InputActFecha.classList.remove('is-invalid');
     InputActFecha.classList.add('is-valid');
     
-    console.log("✅ Fecha validada SIN restricciones");
+    console.log(" Fecha validada SIN restricciones");
 }
 
 const ValidarNombreActividad = () => {
@@ -447,10 +446,9 @@ const EliminarActividad = async (e) => {
     }
 }
 
-// Inicializar la aplicación
 BuscarActividades();
 
-// Event Listeners
+
 datatable.on('click', '.eliminar', EliminarActividad);
 datatable.on('click', '.modificar', llenarFormulario);
 FormActividades.addEventListener('submit', GuardarActividad);

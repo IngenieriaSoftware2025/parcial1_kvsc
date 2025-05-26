@@ -47,7 +47,6 @@ class AsistenciaController extends ActiveRecord
                 throw new Exception("ID de actividad inválido");
             }
 
-            // Buscar actividad
             $sqlActividad = "SELECT act_id, act_nombre, act_fecha_esperada, act_hora_esperada FROM actividad WHERE act_id = " . $actividadId;
             $actividadData = self::fetchArray($sqlActividad);
             
@@ -57,22 +56,18 @@ class AsistenciaController extends ActiveRecord
 
             $actividad = $actividadData[0];
 
-            // Calcular puntualidad comparando con la fecha y hora esperada
             date_default_timezone_set('America/Guatemala');
             $timestampActual = date('Y-m-d H:i');
             $fechaActual = date('Y-m-d');
             $horaActual = date('H:i');
             
-            // Obtener fecha y hora esperada de la actividad
             $fechaEsperada = date('Y-m-d', strtotime($actividad['act_fecha_esperada']));
             $horaEsperada = date('H:i', strtotime($actividad['act_hora_esperada']));
             
-            // Verificar si la actividad es para hoy
             if ($fechaActual !== $fechaEsperada) {
                 throw new Exception("Esta actividad no es para hoy. La fecha esperada es: " . date('d/m/Y', strtotime($fechaEsperada)));
             }
             
-            // Calcular diferencia en minutos solo si es el día correcto
             $minutosActuales = (intval(date('H')) * 60) + intval(date('i'));
             $horaEsperadaParts = explode(':', $horaEsperada);
             $minutosEsperados = (intval($horaEsperadaParts[0]) * 60) + intval($horaEsperadaParts[1]);
@@ -80,7 +75,6 @@ class AsistenciaController extends ActiveRecord
             $diferenciaMinutos = $minutosActuales - $minutosEsperados;
             $fuePuntual = $diferenciaMinutos <= 5;
 
-            // Insertar usando el modelo
             $asistencia = new Asistencia([
                 'asi_actividad' => $actividadId,
                 'asi_timestamp_registro' => $timestampActual,
@@ -91,7 +85,6 @@ class AsistenciaController extends ActiveRecord
             $resultado = $asistencia->guardar();
 
             if ($resultado) {
-                // Mensaje personalizado
                 $nombreActividad = $actividad['act_nombre'];
                 
                 if ($fuePuntual) {
@@ -146,7 +139,7 @@ class AsistenciaController extends ActiveRecord
             
             $asistencias = self::fetchArray($sql);
 
-            // Formatear datos
+           
             foreach ($asistencias as &$asistencia) {
                 $asistencia['fecha_formateada'] = date('d/m/Y H:i', strtotime($asistencia['asi_timestamp_registro']));
                 $asistencia['asi_fue_puntual'] = ($asistencia['asi_fue_puntual'] === 't') ? 1 : 0;

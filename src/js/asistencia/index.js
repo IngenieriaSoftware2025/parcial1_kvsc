@@ -4,16 +4,12 @@ import { validarFormulario } from '../funciones';
 import DataTable from "datatables.net-bs5";
 import { lenguaje } from "../lenguaje";
 
-console.log("🚀 Iniciando sistema de asistencia...");
-
-// 🎯 ELEMENTOS DEL DOM PARA ASISTENCIAS
 const FormAsistencias = document.getElementById('FormAsistencias');
 const BtnRegistrar = document.getElementById('BtnRegistrar');
 const BtnLimpiar = document.getElementById('BtnLimpiar');
 const SelectActividad = document.getElementById('asi_actividad');
 const TableAsistencias = document.getElementById('TableAsistencias');
 
-// Variables de estado
 let registrandoAsistencia = false;
 
 console.log("📋 Elementos encontrados:", {
@@ -23,14 +19,12 @@ console.log("📋 Elementos encontrados:", {
     tabla: !!TableAsistencias
 });
 
-// 🎯 FUNCIÓN: Registrar Asistencia
 const RegistrarAsistencia = async (event) => {
     console.log("🎯 Iniciando registro de asistencia...");
     event.preventDefault();
     
-    // Prevenir doble envío
     if (registrandoAsistencia) {
-        console.log("⚠️ Ya se está procesando un registro");
+        console.log("Ya se está procesando un registro");
         return;
     }
     
@@ -59,7 +53,6 @@ const RegistrarAsistencia = async (event) => {
     }
 
     try {
-        // Mostrar estado de carga
         BtnRegistrar.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Registrando...';
         
         const respuesta = await fetch(url, config);
@@ -91,7 +84,7 @@ const RegistrarAsistencia = async (event) => {
             });
         }
     } catch (error) {
-        console.error("💥 Error completo:", error);
+        console.error("Error completo:", error);
         await Swal.fire({
             position: "center",
             icon: "error",
@@ -100,14 +93,12 @@ const RegistrarAsistencia = async (event) => {
             showConfirmButton: true,
         });
     }
-    
-    // Rehabilitar botón
+    n
     BtnRegistrar.disabled = false;
     BtnRegistrar.innerHTML = '<i class="fas fa-clock"></i> Registrar Mi Llegada';
     registrandoAsistencia = false;
 }
 
-// 🎯 FUNCIÓN: Buscar Asistencias
 const BuscarAsistencias = async () => {
     const url = '/parcial1_kvsc/asistencia/buscarAPI';
     const config = {
@@ -126,9 +117,9 @@ const BuscarAsistencias = async () => {
             } else {
                 mostrarAsistenciasEnTabla(data);
             }
-            console.log(`✅ Se cargaron ${data.length} asistencias`);
+            console.log(`Se cargaron ${data.length} asistencias`);
         } else {
-            console.log("⚠️ No se pudieron cargar asistencias:", mensaje);
+            console.log(" No se pudieron cargar asistencias:", mensaje);
             if (TableAsistencias) {
                 TableAsistencias.innerHTML = `
                     <thead>
@@ -142,7 +133,7 @@ const BuscarAsistencias = async () => {
             }
         }
     } catch (error) {
-        console.error("❌ Error al cargar asistencias:", error);
+        console.error("Error al cargar asistencias:", error);
         if (TableAsistencias) {
             TableAsistencias.innerHTML = `
                 <thead>
@@ -157,7 +148,6 @@ const BuscarAsistencias = async () => {
     }
 }
 
-// 🎯 FUNCIÓN: Mostrar asistencias en tabla
 const mostrarAsistenciasEnTabla = (asistencias) => {
     if (!TableAsistencias) return;
     
@@ -236,8 +226,6 @@ const mostrarAsistenciasEnTabla = (asistencias) => {
     html += '</tbody>';
     TableAsistencias.innerHTML = html;
 }
-
-// 🎯 DATATABLE: Configuración para asistencias
 let datatable = null;
 
 const inicializarDataTable = () => {
@@ -260,7 +248,7 @@ const inicializarDataTable = () => {
                 data: [],
                 responsive: true,
                 pageLength: 10,
-                order: [[0, 'desc']], // Ordenar por fecha descendente
+                order: [[0, 'desc']],
                 columns: [
                     {
                         title: 'Fecha y Hora',
@@ -326,20 +314,18 @@ const inicializarDataTable = () => {
                 ]
             });
             
-            console.log("✅ DataTable inicializado para asistencias");
+            console.log("DataTable inicializado para asistencias");
         } catch (error) {
-            console.log("⚠️ Error al inicializar DataTable:", error);
-            console.log("ℹ️ Continuando con tabla básica");
+            console.log(" Error al inicializar DataTable:", error);
+            console.log("ℹ Continuando con tabla básica");
         }
     }
 }
 
-// 🎯 FUNCIÓN: Limpiar formulario
 const limpiarTodo = () => {
     if (FormAsistencias) {
         FormAsistencias.reset();
         
-        // Limpiar clases de validación
         const inputs = FormAsistencias.querySelectorAll('.form-control, .form-select');
         inputs.forEach(input => {
             input.classList.remove('is-valid', 'is-invalid');
@@ -349,7 +335,6 @@ const limpiarTodo = () => {
     }
 }
 
-// 🎯 FUNCIÓN: Eliminar Asistencia
 const EliminarAsistencia = async (e) => {
     const idAsistencia = e.currentTarget.dataset.id;
     console.log("🗑️ Solicitando eliminar asistencia ID:", idAsistencia);
@@ -370,7 +355,6 @@ const EliminarAsistencia = async (e) => {
 
     if (AlertaConfirmarEliminar.isConfirmed) {
         try {
-            // Mostrar loading
             Swal.fire({
                 title: 'Eliminando...',
                 text: 'Por favor espera',
@@ -428,12 +412,10 @@ const EliminarAsistencia = async (e) => {
     }
 }
 
-// 🎯 FUNCIÓN: Configurar event listeners de tabla
 const configurarEventListenersTabla = () => {
     if (datatable) {
         datatable.on('click', '.eliminar', EliminarAsistencia);
     } else if (TableAsistencias) {
-        // Delegar eventos para tabla básica
         TableAsistencias.addEventListener('click', (e) => {
             if (e.target.closest('.eliminar')) {
                 EliminarAsistencia(e);
@@ -442,20 +424,15 @@ const configurarEventListenersTabla = () => {
     }
 }
 
-// 🎯 INICIALIZACIÓN: Event Listeners
 document.addEventListener('DOMContentLoaded', () => {
     console.log("📱 DOM listo - Inicializando asistencias...");
     
-    // Inicializar DataTable si está disponible
     inicializarDataTable();
     
-    // Configurar eventos de tabla
     configurarEventListenersTabla();
-    
-    console.log("✅ Módulo de asistencias iniciado correctamente");
-});
 
-// 🎯 EVENT LISTENERS: Configuración principal
+    console.log("Módulo de asistencias iniciado correctamente");
+});
 if (FormAsistencias) {
     FormAsistencias.addEventListener('submit', RegistrarAsistencia);
 }
@@ -467,7 +444,6 @@ if (BtnLimpiar) {
     });
 }
 
-// 🎯 CARGAR DATOS INICIALES
 BuscarAsistencias();
 
 console.log("🏁 Script de asistencia cargado completamente");
