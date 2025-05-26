@@ -1,7 +1,7 @@
 {
   "name": "demo-app",
   "version": "1.0.0",
-  "description": "Aplicacion MVC demo",
+  "description": "Parcial 1 KVSC",
   "main": "index.js",
   "scripts": {
     "build": "webpack",
