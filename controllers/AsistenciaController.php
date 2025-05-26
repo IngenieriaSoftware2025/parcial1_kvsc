@@ -11,384 +11,201 @@ class AsistenciaController extends ActiveRecord
 {
     public static function renderizarPagina(Router $router)
     {
-        $actividades = Actividad::all();
+        try {
+            $actividades = self::fetchArray("SELECT * FROM actividad ORDER BY act_nombre ASC");
+            
+            $actividadesObj = [];
+            foreach ($actividades as $actividad) {
+                $obj = new \stdClass();
+                foreach ($actividad as $key => $value) {
+                    $obj->$key = $value;
+                }
+                $actividadesObj[] = $obj;
+            }
+            
+        } catch (Exception $e) {
+            $actividadesObj = [];
+        }
         
         $router->render('asistencia/index', [
-            'actividades' => $actividades,
-            'titulo' => 'Registro de Asistencias'
+            'actividades' => $actividadesObj,
+            'titulo' => 'Control de Puntualidad'
         ]);
     }
 
     public static function registrarAPI()
     {
-        getHeadersApi();
+        header('Content-Type: application/json; charset=utf-8');
 
         try {
-            // Validaciones básicas
             if (empty($_POST['asi_actividad'])) {
-                throw new Exception("Carlos, debes seleccionar una actividad");
-            }
-            
-            if (empty($_POST['asi_fecha_asistencia'])) {
-                throw new Exception("La fecha de asistencia es requerida");
-            }
-            
-            if (empty($_POST['asi_hora_llegada'])) {
-                throw new Exception("Carlos, debes registrar la hora de llegada");
+                throw new Exception("Debes seleccionar una actividad");
             }
 
-            // Obtener datos de la actividad para calcular puntualidad
-            $actividadId = $_POST['asi_actividad'];
-            $actividad = Actividad::find($actividadId);
+            $actividadId = intval($_POST['asi_actividad']);
+            if ($actividadId <= 0) {
+                throw new Exception("ID de actividad inválido");
+            }
+
+            // Buscar actividad
+            $sqlActividad = "SELECT act_id, act_nombre, act_fecha_esperada, act_hora_esperada FROM actividad WHERE act_id = " . $actividadId;
+            $actividadData = self::fetchArray($sqlActividad);
             
-            if (!$actividad) {
+            if (empty($actividadData)) {
                 throw new Exception("Actividad no encontrada");
             }
 
-            // Formatear fecha para Informix
-            $fechaAsistencia = $_POST['asi_fecha_asistencia']; // YYYY-MM-DD
-            $horaLlegada = $_POST['asi_hora_llegada']; // HH:MM
-            
-            // Validar formatos
-            if (!strtotime($fechaAsistencia . ' ' . $horaLlegada)) {
-                throw new Exception("Formato de fecha u hora inválido");
-            }
+            $actividad = $actividadData[0];
 
-            // Calcular diferencia en minutos
-            // Para Informix DATETIME HOUR TO MINUTE, el valor puede venir como "08:30" directamente
-            $horaEsperadaValue = $actividad->act_hora_esperada;
+            // Calcular puntualidad comparando con la fecha y hora esperada
+            date_default_timezone_set('America/Guatemala');
+            $timestampActual = date('Y-m-d H:i');
+            $fechaActual = date('Y-m-d');
+            $horaActual = date('H:i');
             
-            if (!$horaEsperadaValue) {
-                throw new Exception("La actividad no tiene hora esperada configurada");
+            // Obtener fecha y hora esperada de la actividad
+            $fechaEsperada = date('Y-m-d', strtotime($actividad['act_fecha_esperada']));
+            $horaEsperada = date('H:i', strtotime($actividad['act_hora_esperada']));
+            
+            // Verificar si la actividad es para hoy
+            if ($fechaActual !== $fechaEsperada) {
+                throw new Exception("Esta actividad no es para hoy. La fecha esperada es: " . date('d/m/Y', strtotime($fechaEsperada)));
             }
             
-            // Si viene en formato datetime, extraer solo la hora
-            if (strpos($horaEsperadaValue, ' ') !== false) {
-                // Formato: "1900-01-01 08:30" -> extraer "08:30"
-                $horaEsperada = date('H:i', strtotime($horaEsperadaValue));
-            } else {
-                // Ya viene en formato "08:30"
-                $horaEsperada = $horaEsperadaValue;
-            }
+            // Calcular diferencia en minutos solo si es el día correcto
+            $minutosActuales = (intval(date('H')) * 60) + intval(date('i'));
+            $horaEsperadaParts = explode(':', $horaEsperada);
+            $minutosEsperados = (intval($horaEsperadaParts[0]) * 60) + intval($horaEsperadaParts[1]);
             
-            // Asegurar que ambas horas estén en formato correcto para comparar
-            $horaEsperadaSeconds = strtotime('1970-01-01 ' . $horaEsperada);
-            $horaLlegadaSeconds = strtotime('1970-01-01 ' . $horaLlegada);
-            
-            if ($horaEsperadaSeconds === false || $horaLlegadaSeconds === false) {
-                throw new Exception("Error al procesar las horas para comparación");
-            }
-            
-            $diferenciaSegundos = $horaLlegadaSeconds - $horaEsperadaSeconds;
-            $diferenciaMinutos = round($diferenciaSegundos / 60);
-
-            // Determinar si fue puntual (tolerancia de 5 minutos)
+            $diferenciaMinutos = $minutosActuales - $minutosEsperados;
             $fuePuntual = $diferenciaMinutos <= 5;
-            
-            // Formatear para Informix (SIN SEGUNDOS)
-            $fechaFormateada = date('Y-m-d', strtotime($fechaAsistencia));
-            $horaFormateada = date('H:i', strtotime($horaLlegada));
 
+            // Insertar usando el modelo
             $asistencia = new Asistencia([
-                'asi_actividad' => $_POST['asi_actividad'],
-                'asi_fecha_asistencia' => $fechaFormateada,
-                'asi_hora_llegada' => $horaFormateada,
-                'asi_fue_puntual' => $fuePuntual,
+                'asi_actividad' => $actividadId,
+                'asi_timestamp_registro' => $timestampActual,
+                'asi_fue_puntual' => $fuePuntual ? 't' : 'f',
                 'asi_minutos_diferencia' => $diferenciaMinutos
             ]);
+            
+            $resultado = $asistencia->guardar();
 
-            $resultado = $asistencia->crear();
-        
-            $mensaje = $fuePuntual ? 
-                "¡Excelente Carlos! Llegaste puntual a tu actividad" : 
-                "Carlos, llegaste {$diferenciaMinutos} minutos tarde. ¡La próxima vez puedes hacerlo mejor!";
+            if ($resultado) {
+                // Mensaje personalizado
+                $nombreActividad = $actividad['act_nombre'];
+                
+                if ($fuePuntual) {
+                    if ($diferenciaMinutos <= 0) {
+                        $mensaje = "¡Perfecto Carlos! Llegaste temprano a '$nombreActividad'";
+                    } else {
+                        $mensaje = "¡Bien Carlos! Llegaste puntual a '$nombreActividad'";
+                    }
+                } else {
+                    $mensaje = "Carlos, llegaste $diferenciaMinutos minutos tarde a '$nombreActividad'";
+                }
 
-            http_response_code(200);
-            echo json_encode([
-                'codigo' => 1,
-                'mensaje' => $mensaje,
-                'puntual' => $fuePuntual,
-                'minutos_diferencia' => $diferenciaMinutos
-            ]);
-        
+                http_response_code(200);
+                echo json_encode([
+                    'codigo' => 1,
+                    'mensaje' => $mensaje
+                ], JSON_UNESCAPED_UNICODE);
+                
+            } else {
+                throw new Exception("Error al guardar la asistencia");
+            }
+
         } catch (Exception $e) {
-            error_log("Error: " . $e->getMessage());
-        
             http_response_code(400);
             echo json_encode([
                 'codigo' => 0,
                 'mensaje' => $e->getMessage()
-            ]);
+            ], JSON_UNESCAPED_UNICODE);
         }
     }
 
     public static function buscarAPI()
     {
+        header('Content-Type: application/json; charset=utf-8');
+        
         try {
-            $asistencias = self::fetchArray("
-                SELECT a.*, ac.act_nombre, ac.act_hora_esperada, ac.act_fecha_esperada
+            $sql = "
+                SELECT 
+                    a.asi_id,
+                    a.asi_actividad,
+                    a.asi_timestamp_registro,
+                    a.asi_fue_puntual,
+                    a.asi_minutos_diferencia,
+                    ac.act_nombre,
+                    ac.act_fecha_esperada,
+                    ac.act_hora_esperada
                 FROM asistencia a
-                JOIN actividad ac ON a.asi_actividad = ac.act_id
-                ORDER BY a.asi_fecha_asistencia DESC, a.asi_hora_llegada DESC
-            ");
-
-            http_response_code(200);
-            echo json_encode([
-                'codigo' => 1,
-                'mensaje' => 'Asistencias obtenidas correctamente',
-                'data' => $asistencias
-            ]);
+                INNER JOIN actividad ac ON a.asi_actividad = ac.act_id
+                ORDER BY a.asi_timestamp_registro DESC
+                LIMIT 50
+            ";
             
-        } catch (Exception $e) {
-            http_response_code(400);
-            echo json_encode([
-                'codigo' => 0,
-                'mensaje' => 'Error al obtener asistencias',
-                'detalle' => $e->getMessage()
-            ]);
-        }
-    }
+            $asistencias = self::fetchArray($sql);
 
-    public static function modificarAPI()
-    {
-        getHeadersApi();
-
-        try {
-            if (empty($_POST['asi_id'])) {
-                throw new Exception("ID de la asistencia no proporcionado");
-            }
-
-            if (empty($_POST['asi_actividad'])) {
-                throw new Exception("Debes seleccionar una actividad");
-            }
-            
-            if (empty($_POST['asi_fecha_asistencia'])) {
-                throw new Exception("La fecha de asistencia es requerida");
-            }
-            
-            if (empty($_POST['asi_hora_llegada'])) {
-                throw new Exception("La hora de llegada es requerida");
-            }
-
-            $asistencia = Asistencia::find($_POST['asi_id']);
-            
-            if (!$asistencia) {
-                throw new Exception("Asistencia no encontrada");
-            }
-
-            // Recalcular puntualidad
-            $actividadId = $_POST['asi_actividad'];
-            $actividad = Actividad::find($actividadId);
-            
-            if (!$actividad) {
-                throw new Exception("Actividad no encontrada");
-            }
-            
             // Formatear datos
-            $fechaAsistencia = $_POST['asi_fecha_asistencia'];
-            $horaLlegada = $_POST['asi_hora_llegada'];
-            
-            if (!strtotime($fechaAsistencia . ' ' . $horaLlegada)) {
-                throw new Exception("Formato de fecha u hora inválido");
+            foreach ($asistencias as &$asistencia) {
+                $asistencia['fecha_formateada'] = date('d/m/Y H:i', strtotime($asistencia['asi_timestamp_registro']));
+                $asistencia['asi_fue_puntual'] = ($asistencia['asi_fue_puntual'] === 't') ? 1 : 0;
             }
-            
-            // Calcular diferencia
-            $horaEsperadaValue = $actividad->act_hora_esperada;
-            
-            if (!$horaEsperadaValue) {
-                throw new Exception("La actividad no tiene hora esperada configurada");
-            }
-            
-            // Manejar diferentes formatos de hora de Informix
-            if (strpos($horaEsperadaValue, ' ') !== false) {
-                // Formato: "1900-01-01 08:30" -> extraer "08:30"
-                $horaEsperada = date('H:i', strtotime($horaEsperadaValue));
-            } else {
-                // Ya viene en formato "08:30"
-                $horaEsperada = $horaEsperadaValue;
-            }
-            
-            $horaEsperadaSeconds = strtotime('1970-01-01 ' . $horaEsperada);
-            $horaLlegadaSeconds = strtotime('1970-01-01 ' . $horaLlegada);
-            
-            if ($horaEsperadaSeconds === false || $horaLlegadaSeconds === false) {
-                throw new Exception("Error al procesar las horas para comparación");
-            }
-            
-            $diferenciaSegundos = $horaLlegadaSeconds - $horaEsperadaSeconds;
-            $diferenciaMinutos = round($diferenciaSegundos / 60);
-            $fuePuntual = $diferenciaMinutos <= 5;
-            
-            // Formatear para Informix (SIN SEGUNDOS)
-            $fechaFormateada = date('Y-m-d', strtotime($fechaAsistencia));
-            $horaFormateada = date('H:i', strtotime($horaLlegada));
 
-            $asistencia->sincronizar([
-                'asi_actividad' => $_POST['asi_actividad'],
-                'asi_fecha_asistencia' => $fechaFormateada,
-                'asi_hora_llegada' => $horaFormateada,
-                'asi_fue_puntual' => $fuePuntual,
-                'asi_minutos_diferencia' => $diferenciaMinutos
-            ]);
-
-            $resultado = $asistencia->actualizar();
-            
-            if (!$resultado) {
-                throw new Exception("Error al actualizar la asistencia");
-            }
-            
             http_response_code(200);
             echo json_encode([
                 'codigo' => 1,
-                'mensaje' => '¡Asistencia actualizada correctamente!'
-            ]);
+                'mensaje' => 'Asistencias encontradas',
+                'data' => $asistencias
+            ], JSON_UNESCAPED_UNICODE);
             
         } catch (Exception $e) {
-            error_log("Error en modificarAPI: " . $e->getMessage());
-            
             http_response_code(400);
             echo json_encode([
                 'codigo' => 0,
-                'mensaje' => $e->getMessage()
-            ]);
+                'mensaje' => 'Error al buscar asistencias: ' . $e->getMessage()
+            ], JSON_UNESCAPED_UNICODE);
         }
     }
 
     public static function eliminarAPI()
     {
-        getHeadersApi();
-
-        if(empty($_POST['asi_id'])) {
-            http_response_code(400);
-            echo json_encode([
-                'codigo' => 0,
-                'mensaje' => 'ID de la asistencia es obligatorio'
-            ]);
-            return;
-        }
-
-        $id = filter_var($_POST['asi_id'], FILTER_VALIDATE_INT);
-        if(!$id) {
-            http_response_code(400);
-            echo json_encode([
-                'codigo' => 0,
-                'mensaje' => 'ID de la asistencia debe ser un número válido'
-            ]);
-            return;
-        }
+        header('Content-Type: application/json; charset=utf-8');
 
         try {
+            if (empty($_POST['asi_id'])) {
+                throw new Exception('ID de asistencia es obligatorio');
+            }
+
+            $id = intval($_POST['asi_id']);
+            if ($id <= 0) {
+                throw new Exception('ID debe ser un número válido');
+            }
+
             $asistencia = Asistencia::find($id);
             
-            if(!$asistencia) {
-                http_response_code(404);
-                echo json_encode([
-                    'codigo' => 0,
-                    'mensaje' => 'Asistencia no encontrada'
-                ]);
-                return;
-            }
-            
-            $resultado = $asistencia->eliminar();
-            
-            if($resultado) {
-                http_response_code(200);
-                echo json_encode([
-                    'codigo' => 1,
-                    'mensaje' => 'La asistencia ha sido eliminada correctamente'
-                ]);
+            if ($asistencia) {
+                $resultado = $asistencia->eliminar();
+                
+                if ($resultado) {
+                    http_response_code(200);
+                    echo json_encode([
+                        'codigo' => 1,
+                        'mensaje' => 'Asistencia eliminada correctamente'
+                    ], JSON_UNESCAPED_UNICODE);
+                } else {
+                    throw new Exception('No se pudo eliminar la asistencia');
+                }
             } else {
-                http_response_code(400);
-                echo json_encode([
-                    'codigo' => 0,
-                    'mensaje' => 'No se pudo eliminar la asistencia'
-                ]);
+                throw new Exception('Asistencia no encontrada');
             }
             
         } catch (Exception $e) {
             http_response_code(400);
             echo json_encode([
                 'codigo' => 0,
-                'mensaje' => 'Error al eliminar la asistencia',
-                'detalle' => $e->getMessage(),
-            ]);
-        }
-    }
-
-    public static function reportePuntualidadAPI()
-    {
-        try {
-            $estadisticas = self::fetchArray("
-                SELECT 
-                    COUNT(*) as total_asistencias,
-                    SUM(CASE WHEN asi_fue_puntual = 't' THEN 1 ELSE 0 END) as puntuales,
-                    SUM(CASE WHEN asi_fue_puntual = 'f' THEN 1 ELSE 0 END) as tardanzas,
-                    ROUND(AVG(asi_minutos_diferencia), 2) as promedio_minutos,
-                    ROUND((SUM(CASE WHEN asi_fue_puntual = 't' THEN 1 ELSE 0 END) * 100.0 / COUNT(*)), 2) as porcentaje_puntualidad
-                FROM asistencia
-            ");
-
-            $porActividad = self::fetchArray("
-                SELECT 
-                    ac.act_nombre,
-                    COUNT(*) as total_asistencias,
-                    SUM(CASE WHEN a.asi_fue_puntual = 't' THEN 1 ELSE 0 END) as puntuales,
-                    ROUND(AVG(a.asi_minutos_diferencia), 2) as promedio_minutos
-                FROM asistencia a
-                JOIN actividad ac ON a.asi_actividad = ac.act_id
-                GROUP BY ac.act_id, ac.act_nombre
-                ORDER BY puntuales DESC
-            ");
-
-            http_response_code(200);
-            echo json_encode([
-                'codigo' => 1,
-                'mensaje' => 'Reporte de puntualidad generado',
-                'estadisticas_generales' => $estadisticas[0] ?? [],
-                'por_actividad' => $porActividad
-            ]);
-            
-        } catch (Exception $e) {
-            http_response_code(400);
-            echo json_encode([
-                'codigo' => 0,
-                'mensaje' => 'Error al generar reporte',
-                'detalle' => $e->getMessage()
-            ]);
-        }
-    }
-
-    public static function asistenciasPorActividadAPI()
-    {
-        try {
-            $actividadId = $_GET['actividad_id'] ?? null;
-            
-            if (!$actividadId) {
-                throw new Exception("ID de actividad requerido");
-            }
-
-            $asistencias = self::fetchArray("
-                SELECT a.*, ac.act_nombre, ac.act_hora_esperada
-                FROM asistencia a
-                JOIN actividad ac ON a.asi_actividad = ac.act_id
-                WHERE a.asi_actividad = $actividadId
-                ORDER BY a.asi_fecha_asistencia DESC, a.asi_hora_llegada DESC
-            ");
-
-            http_response_code(200);
-            echo json_encode([
-                'codigo' => 1,
-                'mensaje' => 'Asistencias por actividad obtenidas',
-                'data' => $asistencias
-            ]);
-            
-        } catch (Exception $e) {
-            http_response_code(400);
-            echo json_encode([
-                'codigo' => 0,
-                'mensaje' => 'Error al obtener asistencias por actividad',
-                'detalle' => $e->getMessage()
-            ]);
+                'mensaje' => 'Error al eliminar: ' . $e->getMessage()
+            ], JSON_UNESCAPED_UNICODE);
         }
     }
 }

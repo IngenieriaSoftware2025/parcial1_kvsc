@@ -9,9 +9,8 @@ CREATE TABLE actividad (
 CREATE TABLE asistencia (
     asi_id SERIAL PRIMARY KEY,
     asi_actividad INTEGER NOT NULL,
-    asi_fecha_asistencia DATE NOT NULL,
-    asi_hora_llegada DATETIME HOUR TO MINUTE NOT NULL,
-    asi_fue_puntual BOOLEAN,
-    asi_minutos_diferencia INTEGER,
+    asi_timestamp_registro DATETIME YEAR TO MINUTE NOT NULL,
+    asi_fue_puntual BOOLEAN NOT NULL,
+    asi_minutos_diferencia INTEGER NOT NULL,
     FOREIGN KEY (asi_actividad) REFERENCES actividad(act_id)
 );

@@ -15,29 +15,18 @@ const InputActFecha = document.getElementById('act_fecha_esperada');
 const InputActHora = document.getElementById('act_hora_esperada');
 
 const ValidarFecha = () => {
-    const fechaSeleccionada = new Date(InputActFecha.value);
-    const hoy = new Date();
-    hoy.setHours(0, 0, 0, 0); 
-
+    console.log("🎯 ValidarFecha ejecutándose - SIN RESTRICCIONES");
+    
     if (InputActFecha.value === '') {
         InputActFecha.classList.remove('is-valid', 'is-invalid');
         return;
     }
 
-    if (fechaSeleccionada < hoy) {
-        Swal.fire({
-            position: "center",
-            icon: "warning",
-            title: "Fecha incorrecta",
-            text: "Carlos, no puedes programar actividades en el pasado",
-            showConfirmButton: true,
-        });
-        InputActFecha.classList.remove('is-valid');
-        InputActFecha.classList.add('is-invalid');
-    } else {
-        InputActFecha.classList.remove('is-invalid');
-        InputActFecha.classList.add('is-valid');
-    }
+    // Carlos puede programar actividades en cualquier fecha
+    InputActFecha.classList.remove('is-invalid');
+    InputActFecha.classList.add('is-valid');
+    
+    console.log("✅ Fecha validada SIN restricciones");
 }
 
 const ValidarNombreActividad = () => {

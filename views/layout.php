@@ -9,7 +9,7 @@
     <title>App de Carlos</title>
     <style>
         body{
-            background-color:rgb(35, 35, 38);
+            background-color:rgb(54, 54, 69);
         }
         .btn-thistle {
             background-color: palevioletred; 
@@ -72,7 +72,7 @@
                 
                 <ul class="navbar-nav me-auto mb-2 mb-lg-0" style="margin: 0;">
                          <li class="nav-item">
-                        <a class="nav-link" aria-current="page" href="/parcial1_kvsc/asistencia"><i class="bi bi-arrow-up-right-square"></i> Asistencia</a>
+                        <a class="nav-link" aria-current="page" href="/parcial1_kvsc/asistencia"><i class="bi bi-calendar-date"></i> Asistencia</a>
                     </li>
                      <li class="nav-item">
                         <a class="nav-link" aria-current="page" href="/parcial1_kvsc/actividad"><i class="bi bi-card-checklist"></i> Actividad</a>

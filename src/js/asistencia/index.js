@@ -1,46 +1,40 @@
 import { Dropdown } from "bootstrap";
 import Swal from "sweetalert2";
-import { validarFormulario, Toast } from '../funciones';
+import { validarFormulario } from '../funciones';
 import DataTable from "datatables.net-bs5";
 import { lenguaje } from "../lenguaje";
 
+console.log("🚀 Iniciando sistema de asistencia...");
+
+// 🎯 ELEMENTOS DEL DOM PARA ASISTENCIAS
 const FormAsistencias = document.getElementById('FormAsistencias');
 const BtnRegistrar = document.getElementById('BtnRegistrar');
-const BtnModificar = document.getElementById('BtnModificar');
 const BtnLimpiar = document.getElementById('BtnLimpiar');
 const SelectActividad = document.getElementById('asi_actividad');
-const InfoActividad = document.getElementById('info_actividad');
-const HoraEsperadaDisplay = document.getElementById('hora_esperada_display');
-const FechaAsistencia = document.getElementById('asi_fecha_asistencia');
-const HoraLlegada = document.getElementById('asi_hora_llegada');
-const BtnReportePuntualidad = document.getElementById('btnReportePuntualidad');
+const TableAsistencias = document.getElementById('TableAsistencias');
 
-// Establecer fecha actual por defecto
-const hoy = new Date().toISOString().split('T')[0];
-FechaAsistencia.value = hoy;
+// Variables de estado
+let registrandoAsistencia = false;
 
-// Mostrar información de la actividad seleccionada
-const MostrarInfoActividad = () => {
-    const selectedOption = SelectActividad.options[SelectActividad.selectedIndex];
-    
-    if (SelectActividad.value && selectedOption.dataset.hora) {
-        const horaEsperada = selectedOption.dataset.hora;
-        HoraEsperadaDisplay.textContent = horaEsperada;
-        InfoActividad.style.display = 'block';
-    } else {
-        InfoActividad.style.display = 'none';
-    }
-}
+console.log("📋 Elementos encontrados:", {
+    form: !!FormAsistencias,
+    btnRegistrar: !!BtnRegistrar,
+    selectActividad: !!SelectActividad,
+    tabla: !!TableAsistencias
+});
 
-// Establecer hora actual por defecto
-const EstablecerHoraActual = () => {
-    const ahora = new Date();
-    const horaActual = ahora.toTimeString().slice(0, 5);
-    HoraLlegada.value = horaActual;
-}
-
+// 🎯 FUNCIÓN: Registrar Asistencia
 const RegistrarAsistencia = async (event) => {
+    console.log("🎯 Iniciando registro de asistencia...");
     event.preventDefault();
+    
+    // Prevenir doble envío
+    if (registrandoAsistencia) {
+        console.log("⚠️ Ya se está procesando un registro");
+        return;
+    }
+    
+    registrandoAsistencia = true;
     BtnRegistrar.disabled = true;
 
     if (!validarFormulario(FormAsistencias, ['asi_id'])) {
@@ -48,36 +42,41 @@ const RegistrarAsistencia = async (event) => {
             position: "center",
             icon: "info",
             title: "FORMULARIO INCOMPLETO",
-            text: "Carlos, debes completar todos los campos obligatorios",
+            text: "Carlos, debes seleccionar una actividad",
             showConfirmButton: true,
         });
         BtnRegistrar.disabled = false;
+        registrandoAsistencia = false;
         return;
     }
 
     const body = new FormData(FormAsistencias);
-    const url = '/parcial1_kvsc/public/asistencia/registrarAPI';
+
+    const url = '/parcial1_kvsc/asistencia/registrarAPI';
     const config = {
         method: 'POST',
         body
     }
 
     try {
+        // Mostrar estado de carga
+        BtnRegistrar.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Registrando...';
+        
         const respuesta = await fetch(url, config);
         const datos = await respuesta.json();
-        console.log(datos);
-        const { codigo, mensaje, puntual, minutos_diferencia } = datos;
+        console.log("📄 Datos recibidos:", datos);
+        
+        const { codigo, mensaje } = datos
 
         if (codigo == 1) {
-            const icono = puntual ? 'success' : 'warning';
-            const titulo = puntual ? '¡Excelente Carlos!' : 'Carlos, llegaste tarde';
-            
             await Swal.fire({
                 position: "center",
-                icon: icono,
-                title: titulo,
+                icon: "success",
+                title: "¡Excelente!",
                 text: mensaje,
-                showConfirmButton: true,
+                confirmButtonText: "¡Genial!",
+                timer: 4000,
+                timerProgressBar: true
             });
 
             limpiarTodo();
@@ -92,7 +91,7 @@ const RegistrarAsistencia = async (event) => {
             });
         }
     } catch (error) {
-        console.log(error);
+        console.error("💥 Error completo:", error);
         await Swal.fire({
             position: "center",
             icon: "error",
@@ -101,11 +100,16 @@ const RegistrarAsistencia = async (event) => {
             showConfirmButton: true,
         });
     }
+    
+    // Rehabilitar botón
     BtnRegistrar.disabled = false;
+    BtnRegistrar.innerHTML = '<i class="fas fa-clock"></i> Registrar Mi Llegada';
+    registrandoAsistencia = false;
 }
 
+// 🎯 FUNCIÓN: Buscar Asistencias
 const BuscarAsistencias = async () => {
-    const url = '/parcial1_kvsc/public/asistencia/buscarAPI';
+    const url = '/parcial1_kvsc/asistencia/buscarAPI';
     const config = {
         method: 'GET'
     }
@@ -113,401 +117,357 @@ const BuscarAsistencias = async () => {
     try {
         const respuesta = await fetch(url, config);
         const datos = await respuesta.json();
-        const { codigo, mensaje, data } = datos;
+        const { codigo, mensaje, data } = datos
 
         if (codigo == 1) {
-            datatable.clear().draw();
-            datatable.rows.add(data).draw();
-            
-            Toast.fire({
-                icon: 'success',
-                title: mensaje
-            });
+            if (datatable) {
+                datatable.clear().draw();
+                datatable.rows.add(data).draw();
+            } else {
+                mostrarAsistenciasEnTabla(data);
+            }
+            console.log(`✅ Se cargaron ${data.length} asistencias`);
         } else {
-            await Swal.fire({
-                position: "center",
-                icon: "info",
-                title: "Sin registros",
-                text: mensaje,
-                showConfirmButton: true,
-            });
+            console.log("⚠️ No se pudieron cargar asistencias:", mensaje);
+            if (TableAsistencias) {
+                TableAsistencias.innerHTML = `
+                    <thead>
+                        <tr>
+                            <th colspan="6" class="text-center text-warning">
+                                No se pudieron cargar las asistencias
+                            </th>
+                        </tr>
+                    </thead>
+                `;
+            }
         }
     } catch (error) {
-        console.log(error);
+        console.error("❌ Error al cargar asistencias:", error);
+        if (TableAsistencias) {
+            TableAsistencias.innerHTML = `
+                <thead>
+                    <tr>
+                        <th colspan="6" class="text-center text-danger">
+                            Error al cargar las asistencias: ${error.message}
+                        </th>
+                    </tr>
+                </thead>
+            `;
+        }
     }
 }
 
-const datatable = new DataTable('#TableAsistencias', {
-    dom: `
-        <"row mt-3 justify-content-between" 
-            <"col" l> 
-            <"col" B> 
-            <"col-3" f>
-        >
-        t
-        <"row mt-3 justify-content-between" 
-            <"col-md-3 d-flex align-items-center" i> 
-            <"col-md-8 d-flex justify-content-end" p>
-        >
-    `,
-    language: lenguaje,
-    data: [],
-    order: [[1, 'desc'], [2, 'desc']], // Ordenar por fecha y hora descendente
-    columns: [
-        {
-            title: 'No.',
-            data: 'asi_id',
-            width: '5%',
-            orderable: false,
-            render: (data, type, row, meta) => meta.row + 1
-        },
-        { 
-            title: 'Fecha', 
-            data: 'asi_fecha_asistencia',
-            width: '12%',
-            render: (data, type, row) => {
-                if (type === 'display') {
-                    const fecha = new Date(data);
-                    return fecha.toLocaleDateString('es-GT');
-                }
-                return data;
+// 🎯 FUNCIÓN: Mostrar asistencias en tabla
+const mostrarAsistenciasEnTabla = (asistencias) => {
+    if (!TableAsistencias) return;
+    
+    let html = `
+        <thead class="table-dark">
+            <tr>
+                <th>Fecha y Hora</th>
+                <th>Actividad</th>
+                <th>Hora Esperada</th>
+                <th>Diferencia</th>
+                <th>¿Puntual?</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+    `;
+    
+    if (asistencias && asistencias.length > 0) {
+        asistencias.forEach(asistencia => {
+            const esPuntual = parseInt(asistencia.asi_fue_puntual) === 1;
+            const badgePuntual = esPuntual 
+                ? '<span class="badge bg-success"><i class="fas fa-check"></i> SÍ</span>' 
+                : '<span class="badge bg-danger"><i class="fas fa-times"></i> NO</span>';
+            
+            const diferencia = parseInt(asistencia.asi_minutos_diferencia);
+            let textoDiferencia = '';
+            
+            if (diferencia <= 0) {
+                textoDiferencia = `<span class="text-success"><i class="fas fa-clock"></i> ${Math.abs(diferencia)} min temprano</span>`;
+            } else {
+                textoDiferencia = `<span class="${esPuntual ? 'text-warning' : 'text-danger'}"><i class="fas fa-clock"></i> ${diferencia} min tarde</span>`;
             }
-        },
-        { 
-            title: 'Actividad', 
-            data: 'act_nombre',
-            width: '25%'
-        },
-        { 
-            title: 'Hora Esperada', 
-            data: 'act_hora_esperada',
-            width: '12%'
-        },
-        { 
-            title: 'Hora Llegada', 
-            data: 'asi_hora_llegada',
-            width: '12%'
-        },
-        {
-            title: 'Diferencia',
-            data: 'asi_minutos_diferencia',
-            width: '10%',
-            render: (data, type, row) => {
-                if (data == 0) {
-                    return '<span class="text-success fw-bold">Exacto</span>';
-                } else if (data > 0) {
-                    return `<span class="text-danger">+${data} min</span>`;
-                } else {
-                    return `<span class="text-primary">${data} min</span>`;
-                }
-            }
-        },
-        {
-            title: 'Estado',
-            data: 'asi_fue_puntual',
-            width: '10%',
-            render: (data, type, row) => {
-                if (data === 't' || data === true) {
-                    return '<span class="badge badge-puntual">Puntual</span>';
-                } else {
-                    return '<span class="badge badge-tarde">Tarde</span>';
-                }
-            }
-        },
-        {
-            title: 'Acciones',
-            data: 'asi_id',
-            width: '14%',
-            searchable: false,
-            orderable: false,
-            render: (data, type, row, meta) => {
-                return `
-                 <div class='d-flex justify-content-center flex-wrap'>
-                     <button class='btn btn-warning btn-sm modificar mx-1 my-1' 
-                         data-id="${data}" 
-                         data-actividad="${row.asi_actividad}"  
-                         data-fecha="${row.asi_fecha_asistencia}"  
-                         data-hora="${row.asi_hora_llegada}"
-                         title="Modificar registro">
-                         <i class='bi bi-pencil-square'></i>
-                     </button>
-                     <button class='btn btn-danger btn-sm eliminar mx-1 my-1' 
-                         data-id="${data}"
-                         data-actividad="${row.act_nombre}"
-                         title="Eliminar registro">
-                        <i class="bi bi-trash3"></i>
-                     </button>
-                 </div>`;
-            }
+            
+            html += `
+                <tr>
+                    <td>
+                        <small class="text-muted">
+                            <i class="fas fa-calendar-day"></i>
+                            ${asistencia.fecha_formateada || asistencia.asi_timestamp_registro}
+                        </small>
+                    </td>
+                    <td>
+                        <strong class="text-primary">
+                            <i class="fas fa-tasks"></i> ${asistencia.act_nombre}
+                        </strong>
+                    </td>
+                    <td>
+                        <span class="badge bg-info">
+                            <i class="fas fa-clock"></i> ${asistencia.act_hora_esperada}
+                        </span>
+                    </td>
+                    <td>${textoDiferencia}</td>
+                    <td class="text-center">${badgePuntual}</td>
+                    <td class="text-center">
+                        <button class="btn btn-sm btn-outline-danger eliminar" 
+                                data-id="${asistencia.asi_id}"
+                                title="Eliminar asistencia">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    </td>
+                </tr>
+            `;
+        });
+    } else {
+        html += `
+            <tr>
+                <td colspan="6" class="text-center text-muted py-4">
+                    <i class="fas fa-info-circle fa-2x mb-3 d-block"></i>
+                    <h6>No hay asistencias registradas aún</h6>
+                    <small>¡Registra tu primera asistencia arriba!</small>
+                </td>
+            </tr>
+        `;
+    }
+    
+    html += '</tbody>';
+    TableAsistencias.innerHTML = html;
+}
+
+// 🎯 DATATABLE: Configuración para asistencias
+let datatable = null;
+
+const inicializarDataTable = () => {
+    if (TableAsistencias && typeof DataTable !== 'undefined') {
+        try {
+            datatable = new DataTable('#TableAsistencias', {
+                dom: `
+                    <"row mt-3 justify-content-between" 
+                        <"col" l> 
+                        <"col" B> 
+                        <"col-3" f>
+                    >
+                    t
+                    <"row mt-3 justify-content-between" 
+                        <"col-md-3 d-flex align-items-center" i> 
+                        <"col-md-8 d-flex justify-content-end" p>
+                    >
+                `,
+                language: lenguaje,
+                data: [],
+                responsive: true,
+                pageLength: 10,
+                order: [[0, 'desc']], // Ordenar por fecha descendente
+                columns: [
+                    {
+                        title: 'Fecha y Hora',
+                        data: 'fecha_formateada',
+                        render: (data, type, row) => {
+                            return `<small class="text-muted"><i class="fas fa-calendar-day"></i> ${data || row.asi_timestamp_registro}</small>`;
+                        }
+                    },
+                    {
+                        title: 'Actividad',
+                        data: 'act_nombre',
+                        render: (data, type, row) => {
+                            return `<strong class="text-primary"><i class="fas fa-tasks"></i> ${data}</strong>`;
+                        }
+                    },
+                    {
+                        title: 'Hora Esperada',
+                        data: 'act_hora_esperada',
+                        render: (data, type, row) => {
+                            return `<span class="badge bg-info"><i class="fas fa-clock"></i> ${data}</span>`;
+                        }
+                    },
+                    {
+                        title: 'Diferencia',
+                        data: 'asi_minutos_diferencia',
+                        render: (data, type, row) => {
+                            const diferencia = parseInt(data);
+                            const esPuntual = parseInt(row.asi_fue_puntual) === 1;
+                            
+                            if (diferencia <= 0) {
+                                return `<span class="text-success"><i class="fas fa-clock"></i> ${Math.abs(diferencia)} min temprano</span>`;
+                            } else {
+                                return `<span class="${esPuntual ? 'text-warning' : 'text-danger'}"><i class="fas fa-clock"></i> ${diferencia} min tarde</span>`;
+                            }
+                        }
+                    },
+                    {
+                        title: '¿Puntual?',
+                        data: 'asi_fue_puntual',
+                        render: (data, type, row) => {
+                            const esPuntual = parseInt(data) === 1;
+                            return esPuntual 
+                                ? '<span class="badge bg-success"><i class="fas fa-check"></i> SÍ</span>' 
+                                : '<span class="badge bg-danger"><i class="fas fa-times"></i> NO</span>';
+                        }
+                    },
+                    {
+                        title: 'Acciones',
+                        data: 'asi_id',
+                        searchable: false,
+                        orderable: false,
+                        render: (data, type, row, meta) => {
+                            return `
+                             <div class='d-flex justify-content-center'>
+                                 <button class='btn btn-sm btn-outline-danger eliminar' 
+                                     data-id="${data}"
+                                     title="Eliminar asistencia">
+                                     <i class='fas fa-trash-alt'></i>
+                                 </button>
+                             </div>`;
+                        }
+                    }
+                ]
+            });
+            
+            console.log("✅ DataTable inicializado para asistencias");
+        } catch (error) {
+            console.log("⚠️ Error al inicializar DataTable:", error);
+            console.log("ℹ️ Continuando con tabla básica");
         }
-    ]
+    }
+}
+
+// 🎯 FUNCIÓN: Limpiar formulario
+const limpiarTodo = () => {
+    if (FormAsistencias) {
+        FormAsistencias.reset();
+        
+        // Limpiar clases de validación
+        const inputs = FormAsistencias.querySelectorAll('.form-control, .form-select');
+        inputs.forEach(input => {
+            input.classList.remove('is-valid', 'is-invalid');
+        });
+        
+        console.log("🧹 Formulario limpiado");
+    }
+}
+
+// 🎯 FUNCIÓN: Eliminar Asistencia
+const EliminarAsistencia = async (e) => {
+    const idAsistencia = e.currentTarget.dataset.id;
+    console.log("🗑️ Solicitando eliminar asistencia ID:", idAsistencia);
+
+    const AlertaConfirmarEliminar = await Swal.fire({
+        position: "center",
+        icon: "warning",
+        title: "¿Estás seguro?",
+        text: 'Esta acción no se puede deshacer',
+        showConfirmButton: true,
+        confirmButtonText: 'Sí, eliminar',
+        confirmButtonColor: '#dc3545',
+        cancelButtonText: 'Cancelar',
+        cancelButtonColor: '#6c757d',
+        showCancelButton: true,
+        reverseButtons: true
+    });
+
+    if (AlertaConfirmarEliminar.isConfirmed) {
+        try {
+            // Mostrar loading
+            Swal.fire({
+                title: 'Eliminando...',
+                text: 'Por favor espera',
+                allowOutsideClick: false,
+                didOpen: () => {
+                    Swal.showLoading();
+                }
+            });
+
+            const formData = new FormData();
+            formData.append('asi_id', idAsistencia);
+            
+            const url = `/parcial1_kvsc/asistencia/eliminarAPI`;
+            const config = {
+                method: 'POST',
+                body: formData
+            }
+
+            const consulta = await fetch(url, config);
+            const respuesta = await consulta.json();
+            const { codigo, mensaje } = respuesta;
+
+            if (codigo == 1) {
+                await Swal.fire({
+                    position: "center",
+                    icon: "success",
+                    title: "¡Eliminado!",
+                    text: mensaje,
+                    confirmButtonText: "Entendido",
+                    confirmButtonColor: "#28a745",
+                    timer: 3000,
+                    timerProgressBar: true
+                });
+
+                BuscarAsistencias();
+            } else {
+                await Swal.fire({
+                    position: "center",
+                    icon: "error",
+                    title: "Error",
+                    text: mensaje,
+                    showConfirmButton: true,
+                });
+            }
+        } catch (error) {
+            console.error("Error al eliminar:", error);
+            await Swal.fire({
+                position: "center",
+                icon: "error",
+                title: "Error de conexión",
+                text: "No se pudo eliminar la asistencia",
+                showConfirmButton: true,
+            });
+        }
+    }
+}
+
+// 🎯 FUNCIÓN: Configurar event listeners de tabla
+const configurarEventListenersTabla = () => {
+    if (datatable) {
+        datatable.on('click', '.eliminar', EliminarAsistencia);
+    } else if (TableAsistencias) {
+        // Delegar eventos para tabla básica
+        TableAsistencias.addEventListener('click', (e) => {
+            if (e.target.closest('.eliminar')) {
+                EliminarAsistencia(e);
+            }
+        });
+    }
+}
+
+// 🎯 INICIALIZACIÓN: Event Listeners
+document.addEventListener('DOMContentLoaded', () => {
+    console.log("📱 DOM listo - Inicializando asistencias...");
+    
+    // Inicializar DataTable si está disponible
+    inicializarDataTable();
+    
+    // Configurar eventos de tabla
+    configurarEventListenersTabla();
+    
+    console.log("✅ Módulo de asistencias iniciado correctamente");
 });
 
-const llenarFormulario = (event) => {
-    const datos = event.currentTarget.dataset;
+// 🎯 EVENT LISTENERS: Configuración principal
+if (FormAsistencias) {
+    FormAsistencias.addEventListener('submit', RegistrarAsistencia);
+}
 
-    document.getElementById('asi_id').value = datos.id;
-    document.getElementById('asi_actividad').value = datos.actividad;
-    document.getElementById('asi_fecha_asistencia').value = datos.fecha;
-    document.getElementById('asi_hora_llegada').value = datos.hora;
-
-    // Mostrar info de actividad
-    MostrarInfoActividad();
-
-    BtnRegistrar.classList.add('d-none');
-    BtnModificar.classList.remove('d-none');
-
-    FormAsistencias.scrollIntoView({ 
-        behavior: 'smooth', 
-        block: 'start' 
+if (BtnLimpiar) {
+    BtnLimpiar.addEventListener('click', (e) => {
+        e.preventDefault();
+        limpiarTodo();
     });
 }
 
-const limpiarTodo = () => {
-    FormAsistencias.reset();
-    
-    // Restablecer fecha actual
-    FechaAsistencia.value = hoy;
-    
-    BtnRegistrar.classList.remove('d-none');
-    BtnModificar.classList.add('d-none');
-    InfoActividad.style.display = 'none';
-    
-    // Limpiar validaciones visuales
-    document.querySelectorAll('.is-valid, .is-invalid').forEach(el => {
-        el.classList.remove('is-valid', 'is-invalid');
-    });
-}
-
-const ModificarAsistencia = async (event) => {
-    event.preventDefault();
-    BtnModificar.disabled = true;
-
-    if (!validarFormulario(FormAsistencias, [''])) {
-        Swal.fire({
-            position: "center",
-            icon: "info",
-            title: "FORMULARIO INCOMPLETO",
-            text: "Carlos, debes completar todos los campos",
-            showConfirmButton: true,
-        });
-        BtnModificar.disabled = false;
-        return;
-    }
-
-    const body = new FormData(FormAsistencias);
-    const url = '/parcial1_kvsc/public/asistencia/modificarAPI';
-    const config = {
-        method: 'POST',
-        body
-    }
-
-    try {
-        const respuesta = await fetch(url, config);
-        const datos = await respuesta.json();
-        const { codigo, mensaje } = datos;
-
-        if (codigo == 1) {
-            await Swal.fire({
-                position: "center",
-                icon: "success",
-                title: "¡Actualizado!",
-                text: mensaje,
-                showConfirmButton: true,
-            });
-
-            limpiarTodo();
-            BuscarAsistencias();
-        } else {
-            await Swal.fire({
-                position: "center",
-                icon: "error",
-                title: "Error",
-                text: mensaje,
-                showConfirmButton: true,
-            });
-        }
-    } catch (error) {
-        console.log(error);
-    }
-    BtnModificar.disabled = false;
-}
-
-const EliminarAsistencia = async (event) => {
-    const id = event.currentTarget.dataset.id;
-    const actividad = event.currentTarget.dataset.actividad;
-    
-    const resultado = await Swal.fire({
-        title: '¿Estás seguro Carlos?',
-        text: `¿Quieres eliminar el registro de "${actividad}"? Esta acción no se puede deshacer.`,
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: '#d33',
-        cancelButtonColor: '#3085d6',
-        confirmButtonText: 'Sí, eliminar',
-        cancelButtonText: 'Cancelar'
-    });
-
-    if (!resultado.isConfirmed) {
-        return;
-    }
-    
-    const body = new FormData();
-    body.append('asi_id', id);
-
-    const url = '/parcial1_kvsc/public/asistencia/eliminarAPI';
-    const config = {
-        method: 'POST',
-        body
-    }
-
-    try {
-        const respuesta = await fetch(url, config);
-        const datos = await respuesta.json();
-        const { codigo, mensaje } = datos;
-
-        if (codigo == 1) {
-            await Swal.fire({
-                position: "center",
-                icon: "success",
-                title: "Eliminado",
-                text: mensaje,
-                showConfirmButton: true,
-            });
-            BuscarAsistencias();
-        } else {
-            await Swal.fire({
-                position: "center",
-                icon: "error",
-                title: "Error",
-                text: mensaje,
-                showConfirmButton: true,
-            });
-        }
-    } catch (error) {
-        console.log(error);
-        await Swal.fire({
-            position: "center",
-            icon: "error",
-            title: "Error",
-            text: "Error de conexión al eliminar el registro",
-            showConfirmButton: true,
-        });
-    }
-}
-
-const MostrarEstadisticas = async () => {
-    const url = '/parcial1_kvsc/public/asistencia/reportePuntualidadAPI';
-    const config = {
-        method: 'GET'
-    }
-
-    try {
-        const respuesta = await fetch(url, config);
-        const datos = await respuesta.json();
-        
-        if (datos.codigo == 1) {
-            const { estadisticas_generales, por_actividad } = datos;
-            
-            let contenidoHTML = `
-                <div class="row mb-4">
-                    <div class="col-md-6">
-                        <div class="card bg-success text-white">
-                            <div class="card-body text-center">
-                                <h3>${estadisticas_generales.puntuales || 0}</h3>
-                                <p>Asistencias Puntuales</p>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="card bg-danger text-white">
-                            <div class="card-body text-center">
-                                <h3>${estadisticas_generales.tardanzas || 0}</h3>
-                                <p>Llegadas Tarde</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="row mb-4">
-                    <div class="col-md-6">
-                        <div class="card bg-primary text-white">
-                            <div class="card-body text-center">
-                                <h3>${estadisticas_generales.porcentaje_puntualidad || 0}%</h3>
-                                <p>Porcentaje de Puntualidad</p>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="card bg-info text-white">
-                            <div class="card-body text-center">
-                                <h3>${estadisticas_generales.promedio_minutos || 0} min</h3>
-                                <p>Promedio de Diferencia</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-            
-            if (por_actividad && por_actividad.length > 0) {
-                contenidoHTML += `
-                    <h5>Por Actividad:</h5>
-                    <div class="table-responsive">
-                        <table class="table table-sm">
-                            <thead>
-                                <tr>
-                                    <th>Actividad</th>
-                                    <th>Total</th>
-                                    <th>Puntuales</th>
-                                    <th>Promedio</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                `;
-                
-                por_actividad.forEach(actividad => {
-                    contenidoHTML += `
-                        <tr>
-                            <td>${actividad.act_nombre}</td>
-                            <td>${actividad.total_asistencias}</td>
-                            <td><span class="badge bg-success">${actividad.puntuales}</span></td>
-                            <td>${actividad.promedio_minutos} min</td>
-                        </tr>
-                    `;
-                });
-                
-                contenidoHTML += `
-                            </tbody>
-                        </table>
-                    </div>
-                `;
-            }
-            
-            document.getElementById('contenidoEstadisticas').innerHTML = contenidoHTML;
-            
-            const modal = new bootstrap.Modal(document.getElementById('modalEstadisticas'));
-            modal.show();
-        }
-        
-    } catch (error) {
-        console.log(error);
-        Swal.fire({
-            icon: 'error',
-            title: 'Error',
-            text: 'No se pudieron cargar las estadísticas'
-        });
-    }
-}
-
-// Event Listeners
+// 🎯 CARGAR DATOS INICIALES
 BuscarAsistencias();
-FormAsistencias.addEventListener('submit', RegistrarAsistencia);
-SelectActividad.addEventListener('change', MostrarInfoActividad);
-datatable.on('click', '.modificar', llenarFormulario);
-datatable.on('click', '.eliminar', EliminarAsistencia);
-BtnModificar.addEventListener('click', ModificarAsistencia);
-BtnLimpiar.addEventListener('click', limpiarTodo);
-BtnReportePuntualidad.addEventListener('click', MostrarEstadisticas);
 
-// Establecer hora actual al cargar la página
-EstablecerHoraActual();
+console.log("🏁 Script de asistencia cargado completamente");
